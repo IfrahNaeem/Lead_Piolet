@@ -13,6 +13,7 @@ import streamlit as st
 
 import db
 import ai_engine
+import gmail_client
 import ui_helpers as ui
 
 st.set_page_config(page_title="LeadPilot AI", page_icon="🚀", layout="centered")
@@ -59,7 +60,35 @@ if page == "⚙️ Setup":
             (st.success if ok else st.error)(msg)
 
     with st.container(border=True):
-        st.markdown("#### 2. Your service profile")
+        st.markdown("#### 2. Connect Gmail (for real email sending)")
+        st.caption(
+            "Optional. Without this, approved emails just change status to SENT in the app "
+            "without actually being emailed. Connect Gmail to have them really sent from your account."
+        )
+        if gmail_client.is_connected():
+            st.success("🟢 Gmail is connected. Approved emails will be sent for real.")
+            if st.button("Disconnect Gmail"):
+                gmail_client.disconnect()
+                st.rerun()
+        else:
+            st.caption(
+                "You'll need a `client_secret.json` file from your own Google Cloud project "
+                "(OAuth client type: Desktop app, scope: gmail.send)."
+            )
+            secret_file = st.file_uploader("Upload client_secret.json", type=["json"])
+            if secret_file is not None:
+                ok, msg = gmail_client.set_client_config(secret_file)
+                (st.success if ok else st.error)(msg)
+
+            if gmail_client.has_client_config():
+                st.caption("Clicking below opens a Google sign-in window in your browser.")
+                if st.button("Connect Gmail", type="primary"):
+                    with st.spinner("Waiting for you to finish signing in with Google..."):
+                        ok, msg = gmail_client.connect()
+                    (st.success if ok else st.error)(msg)
+
+    with st.container(border=True):
+        st.markdown("#### 3. Your service profile")
         st.caption("This tells the AI who you are and what you sell, so leads and messages stay relevant.")
         profile = db.get_profile()
         c1, c2 = st.columns(2)
@@ -264,12 +293,41 @@ elif page == "📋 Approval Queue":
                 with st.container(border=True):
                     st.markdown(f"**#{m['id']} · {m['message_type']} · {lead['company_name'] if lead else '?'}**")
                     st.write(m["body"])
-                    if lead and db.is_opted_out(lead["id"]):
+
+                    opted_out = lead and db.is_opted_out(lead["id"])
+                    if opted_out:
                         st.error("This lead opted out — sending is blocked.")
-                    elif st.button("📤 Mark as Sent", key=f"send_{m['id']}", type="primary"):
-                        ok, msg = db.transition_message(m["id"], "SENT")
-                        (st.success if ok else st.error)(msg)
-                        st.rerun()
+
+                    elif m["message_type"] == "EMAIL" and gmail_client.is_connected():
+                        # Real send via Gmail API
+                        to_email = lead["contact_email"] if lead else ""
+                        if st.button("📤 Send via Gmail", key=f"send_{m['id']}", type="primary"):
+                            ok, msg = gmail_client.send_email(to_email, m["subject"], m["body"])
+                            if ok:
+                                db.transition_message(m["id"], "SENT")
+                                st.success(msg)
+                            else:
+                                st.error(msg)
+                            st.rerun()
+
+                    elif m["message_type"] == "EMAIL" and not gmail_client.is_connected():
+                        st.caption("Gmail isn't connected — this will only update the status, not really send. "
+                                   "Connect Gmail on the Setup page to send for real.")
+                        if st.button("📤 Mark as Sent (simulated)", key=f"send_{m['id']}"):
+                            ok, msg = db.transition_message(m["id"], "SENT")
+                            (st.success if ok else st.error)(msg)
+                            st.rerun()
+
+                    else:
+                        # LinkedIn / follow-ups: no safe automation exists here.
+                        # Give the user a one-click copy and let them send it themselves.
+                        st.caption("LinkedIn sending isn't automated (doing so risks your account "
+                                   "being suspended by LinkedIn). Copy the message and send it yourself.")
+                        st.code(m["body"], language=None)
+                        if st.button("📤 Mark as Sent (I sent it manually)", key=f"send_{m['id']}"):
+                            ok, msg = db.transition_message(m["id"], "SENT")
+                            (st.success if ok else st.error)(msg)
+                            st.rerun()
 
         if not pending and not approved:
             st.caption("Nothing pending — everything's been actioned.")
