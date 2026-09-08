@@ -56,9 +56,14 @@ def is_connected():
 
 
 def connect():
-    """Runs the OAuth login flow. This opens a browser window and BLOCKS
-    until you finish logging in and clicking Allow (or it times out) —
-    that's expected, it's waiting on you, not stuck."""
+    """Runs the OAuth login flow.
+
+    Instead of relying on the library to auto-launch a browser (which fails
+    with "could not locate runnable browser" on servers/containers/remote
+    machines with no default browser configured), we build the sign-in link
+    ourselves and show it directly in the app. You click it, log in, and
+    this function keeps waiting in the background until you finish."""
+    import secrets
     from google_auth_oauthlib.flow import InstalledAppFlow
 
     config = st.session_state.get("gmail_client_config")
@@ -67,7 +72,28 @@ def connect():
 
     try:
         flow = InstalledAppFlow.from_client_config(config, SCOPES)
-        creds = flow.run_local_server(port=0)
+
+        # Pick a free local port ourselves so we can build a matching URL
+        # before starting the blocking local server.
+        import socket
+        sock = socket.socket()
+        sock.bind(("localhost", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        flow.redirect_uri = f"http://localhost:{port}/"
+        state = secrets.token_urlsafe(16)
+        auth_url, _ = flow.authorization_url(
+            state=state, prompt="consent", access_type="offline"
+        )
+
+        # This link renders in the app immediately — Streamlit sends each
+        # element to the browser as it's created, even though the blocking
+        # call below hasn't returned yet.
+        st.markdown(f"👉 **[Click here to sign in with Google]({auth_url})**")
+        st.caption("Waiting for you to finish signing in in the new tab...")
+
+        creds = flow.run_local_server(port=port, open_browser=False, state=state)
     except Exception as e:
         return False, f"Google sign-in failed: {e}"
 
