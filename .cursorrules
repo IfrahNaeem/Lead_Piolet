@@ -1,0 +1,99 @@
+# AlgoQuest — Cursor Project Rules
+# These rules guide AI code generation in this project.
+# Place this file at: .cursorrules (project root)
+
+## Project Overview
+AlgoQuest is an AI-powered LeetCode learning platform. Students learn from scratch (Python basics) to solving hard LeetCode problems, guided by ML that adapts to their skill level.
+
+## Tech Stack
+- Frontend: Next.js 14 (App Router), TypeScript, Tailwind CSS, Framer Motion
+- Backend: FastAPI (Python 3.11+), SQLAlchemy, Alembic
+- Database: PostgreSQL via Supabase
+- Auth: Supabase Auth
+- ML: scikit-learn
+- Code execution: Judge0 API
+
+## Color Tokens (always use these CSS variables)
+```
+--color-bg: #0D0F1A
+--color-surface: #161929
+--color-accent-purple: #7C3AED
+--color-accent-cyan: #06B6D4
+--color-success: #10B981
+--color-warning: #F59E0B
+--color-error: #EF4444
+--color-text-primary: #F1F5F9
+--color-text-muted: #94A3B8
+--color-border: #1E2940
+```
+
+## Coding Standards
+
+### TypeScript / React
+- All components are functional with TypeScript (no `any` types)
+- Use `'use client'` directive only when necessary (prefer server components)
+- Props interfaces are always explicitly typed
+- Use Zod for all form validation
+- Use React Hook Form for all forms
+- Use Zustand for global state (no Redux, no Context API for global state)
+- Error boundaries on every major page
+
+### Python / FastAPI
+- Python 3.11+ type hints everywhere
+- Pydantic v2 for all schemas
+- Use `async def` for all route handlers
+- All ML inference is async (run in thread pool if sync)
+- Never expose raw database errors to API responses
+- Use loguru for logging (not print statements)
+
+### API Design
+- All API routes are prefixed with `/api/v1/`
+- Consistent response format:
+  ```json
+  { "success": true, "data": {...} }
+  { "success": false, "error": "message", "code": "ERROR_CODE" }
+  ```
+- Use HTTP status codes correctly (200, 201, 400, 401, 403, 404, 422, 500)
+
+### Database
+- Use Alembic for all schema changes (never edit tables manually)
+- All models have `created_at` and `updated_at` timestamps
+- Use UUIDs for all primary keys
+
+### ML Models
+- All ML models are saved as `.pkl` files in `backend/app/ml/saved_models/`
+- Every ML function has a fallback if model is not loaded
+- ML predictions are always logged to DB for future retraining
+
+## File Naming
+- React components: PascalCase (`ProblemCard.tsx`)
+- Utility functions: camelCase (`formatScore.ts`)
+- API routes: snake_case in FastAPI (`/api/v1/user_progress`)
+- Python files: snake_case (`level_detector.py`)
+
+## Levels
+- Beginner: slug `beginner`, color `#10B981` (green)
+- Intermediate: slug `intermediate`, color `#06B6D4` (cyan)
+- Advanced: slug `advanced`, color `#7C3AED` (purple)
+
+## ML Level-Up Rule
+Trigger level-up suggestion when:
+- Last 3 submissions all have `score >= 70` AND `passed_all_tests == true`
+- User is not already at max level
+- User hasn't been shown a level-up prompt in the last 24 hours
+
+## Judge0 Language ID
+- Python 3: `71`
+
+## Important UX Rules
+- Every problem has exactly 3 progressive hints (cost: 5 XP each)
+- "Optimal solution" is revealed only after the student submits
+- Scores show: 0-49 (red, "Keep practicing"), 50-74 (amber, "Good effort"), 75-89 (cyan, "Great"), 90-100 (green, "Excellent")
+- XP gained per problem: Easy=10, Medium=25, Hard=50. Deduct 5 per hint used.
+
+## Do Not
+- Do not use `any` in TypeScript
+- Do not use `print()` in Python (use loguru)
+- Do not call ML models synchronously in API handlers (use thread pools)
+- Do not expose Supabase service role key to frontend
+- Do not skip error handling on Judge0 API calls (it can timeout)
